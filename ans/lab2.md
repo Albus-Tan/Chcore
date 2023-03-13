@@ -179,10 +179,30 @@ isb
 >
 > 提示：可假设取消映射的地址范围一定是某次映射的完整地址范围，即不会先映射一大块，再取消映射其中一小块。
 
-详细实现见代码
+详细实现见代码，结果如下：
+
+```shell
+......
+[TEST] Buddy tests finished
+[INFO] [ChCore] mm init finished
+[TEST] kmalloc: OK
+[TEST] Map & unmap one page: OK
+[TEST] Map & unmap multiple pages: OK
+[TEST] Map & unmap huge range: OK
+[TEST] Map & unmap with huge page support: OK
+[TEST] Page table tests finished
+......
+```
 
 > 思考题 8：阅读 Arm Architecture Reference Manual，思考要在操作系统中支持写时拷贝（Copy-on-Write，CoW）[^cow]需要配置页表描述符的哪个/哪些字段，并在发生缺页异常（实际上是 permission fault）时如何处理。
 
+需要设置页表描述符中该虚拟页是否可写的权限位AP (Data Access Permissions)，以及DBM（Dirty Bit Modifier）位。写时拷贝允许应用程序 A 和 B 以只读的方式共享同一段物理内存，一旦某个应用程序对该内存区域进行修改就会触发缺页异常，CPU同样把控制流传递给操作系统预先设置的缺页异常处理函数，然后会发现是因为写了只读内存，并且此时该内存区域是被标记为写时拷贝的，然后操作系统会在物理内存中将缺页异常对应的物理页重新拷贝一份，并把新拷贝的物理页权限改为可读可写重新映射给应用程序。
+
 > 思考题 9：为了简单起见，在 ChCore 实验中没有为内核页表使用细粒度的映射，而是直接沿用了启动时的粗粒度页表，请思考这样做有什么问题。
 
+- 内核可能会分配一些大小较小但有不同权限的内存片段，粗粒度页表不容易对权限做细粒度管理。
+- 粗粒度页表可能会造成物理内存资源浪费，产生较多的碎片。
+
 > 挑战题 10：使用前面实现的 `page_table.c` 中的函数，在内核启动后重新配置内核页表，进行细粒度的映射。
+
+[^cow]: 
