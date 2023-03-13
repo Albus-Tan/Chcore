@@ -341,7 +341,7 @@ int unmap_range_in_pgtbl(void *pgtbl, vaddr_t va, size_t len)
         // Iterate until all pages are unmapped
         while (page_num > 0){
 
-                ptp_t *current_ptp = (ptp_t *)pgtbl;;
+                ptp_t *current_ptp = (ptp_t *)pgtbl;
                 pte_t *current_pte;
 
                 // Walk through each level of page table using `get_next_ptp`
@@ -368,8 +368,8 @@ int unmap_range_in_pgtbl(void *pgtbl, vaddr_t va, size_t len)
 
                 // mark the final level pte as invalid
                 for(int i = GET_L3_INDEX(va); i < PTP_ENTRIES; ++i){
-                        pte_t pte_val = current_ptp->ent[i];
-                        pte_val.pte = PTE_DESCRIPTOR_INVALID;
+
+                        current_ptp->ent[i].pte = PTE_DESCRIPTOR_INVALID;
 
                         --page_num;
                         if(page_num == 0) return 0;
