@@ -547,8 +547,8 @@ int unmap_range_in_pgtbl_huge(void *pgtbl, vaddr_t va, size_t len)
 
                 // mark the final level pte as invalid
                 for(int i = GET_L3_INDEX(va); i < PTP_ENTRIES; ++i){
-                        pte_t pte_val = current_ptp->ent[i];
-                        pte_val.pte = PTE_DESCRIPTOR_INVALID;
+
+                        current_ptp->ent[i].pte = PTE_DESCRIPTOR_INVALID;
 
                         --page_num;
                         if(page_num == 0) return 0;
