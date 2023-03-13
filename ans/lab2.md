@@ -173,11 +173,13 @@ isb
 > - 实现中可以使用 `get_next_ptp`、`set_pte_flags`、`GET_LX_INDEX` 等已经给定的函数和宏
 > - 更多提示见代码注释
 
-
+详细实现见代码
 
 > 练习题 7：完成 `kernel/arch/aarch64/mm/page_table.c` 中的 `map_range_in_pgtbl_huge` 和 `unmap_range_in_pgtbl_huge` 函数中的 `LAB 2 TODO 4` 部分，实现大页（2MB、1GB 页）支持。
 >
 > 提示：可假设取消映射的地址范围一定是某次映射的完整地址范围，即不会先映射一大块，再取消映射其中一小块。
+
+详细实现见代码
 
 > 思考题 8：阅读 Arm Architecture Reference Manual，思考要在操作系统中支持写时拷贝（Copy-on-Write，CoW）[^cow]需要配置页表描述符的哪个/哪些字段，并在发生缺页异常（实际上是 permission fault）时如何处理。
 

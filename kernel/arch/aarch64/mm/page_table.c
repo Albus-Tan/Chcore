@@ -130,11 +130,28 @@ static int get_next_ptp(ptp_t *cur_ptp, u32 level, vaddr_t va, ptp_t **next_ptp,
                         paddr_t new_ptp_paddr;
                         pte_t new_pte_val;
 
-                        /* alloc a single physical page as a new page table page  */
-                        /* LAB 2 TODO 3 BEGIN 
-                         * Hint: use get_pages to allocate a new page table page
-                         *       set the attr `is_valid`, `is_table` and `next_table_addr` of new pte
+                        /* alloc a single physical page as a new page table page
                          */
+                        /* LAB 2 TODO 3 BEGIN
+                         * Hint: use get_pages to allocate a new page table page
+                         *       set the attr `is_valid`, `is_table` and
+                         * `next_table_addr` of new pte
+                         */
+                        new_ptp = get_pages(0); // get new page
+                        BUG_ON(new_ptp == NULL);
+                        memset((void *)new_ptp, 0, PAGE_SIZE);
+                        // get start physical address of new page table
+                        new_ptp_paddr = virt_to_phys((vaddr_t)new_ptp);
+
+                        new_pte_val.pte = 0;
+                        new_pte_val.table.is_valid = 1;
+                        new_pte_val.table.is_table = 1;
+                        new_pte_val.table.next_table_addr = new_ptp_paddr
+                                                            >> PAGE_SHIFT;
+
+                        /* same effect as: entry->pte = new_pte_val.pte; */
+                        // set entry
+                        cur_ptp->ent[index] = new_pte_val;
 
                         /* LAB 2 TODO 3 END */
                 }
@@ -211,6 +228,56 @@ int query_in_pgtbl(void *pgtbl, vaddr_t va, paddr_t *pa, pte_t **entry)
          * `-ENOMAPPING` if the va is not mapped.
          */
 
+        ptp_t *l0_ptp, *l1_ptp, *l2_ptp, *l3_ptp, *fake_ptp;
+        pte_t *l0_pte, *l1_pte, *l2_pte, *l3_pte;
+
+        if (pgtbl == NULL) {
+                kwarn("%s: input arg is NULL.\n", __func__);
+                return -1;
+        }
+
+        l0_ptp = (ptp_t *)pgtbl;
+
+        // get_next_ptp(ptp_t *cur_ptp, u32 level, vaddr_t va, ptp_t **next_ptp,
+        // pte_t **pte, bool alloc)
+
+        // check in L0 page table
+        int res = get_next_ptp(l0_ptp, 0, va, &l1_ptp, &l0_pte, false);
+        if (res == NORMAL_PTP) {
+                // check in L1 page table
+                res = get_next_ptp(l1_ptp, 1, va, &l2_ptp, &l1_pte, false);
+                if (res == NORMAL_PTP) {
+                        // check in L2 page table
+                        res = get_next_ptp(
+                                l2_ptp, 2, va, &l3_ptp, &l2_pte, false);
+                        if (res == NORMAL_PTP) {
+                                // check in L3 page table
+                                res = get_next_ptp(
+                                        l3_ptp, 3, va, &fake_ptp, &l3_pte, false);
+                                if (res != -ENOMAPPING) {
+                                        // 4KB page
+                                        if (entry != NULL) *entry = l3_pte;
+                                        *pa = virt_to_phys((vaddr_t)fake_ptp) + GET_VA_OFFSET_L3(va);
+                                        return 0;
+                                }
+                        } else if (res == BLOCK_PTP) {
+                                // 2MB block
+                                if (entry != NULL) *entry = l2_pte;
+                                *pa = virt_to_phys((vaddr_t)l3_ptp) + GET_VA_OFFSET_L2(va);
+                                return 0;
+                        }
+                } else if (res == BLOCK_PTP) {
+                        // 1GB block
+                        if (entry != NULL) *entry = l1_pte;
+                        *pa = virt_to_phys((vaddr_t)l2_ptp) + GET_VA_OFFSET_L1(va);
+                        return 0;
+                }
+        } else if (res == BLOCK_PTP) {
+                BUG_ON(1);
+                return 0;
+        }
+
+        return -ENOMAPPING;
         /* LAB 2 TODO 3 END */
 }
 
@@ -225,6 +292,38 @@ int map_range_in_pgtbl(void *pgtbl, vaddr_t va, paddr_t pa, size_t len,
          * mapped.
          */
 
+        u64 page_num = len / PAGE_SIZE + (len % PAGE_SIZE > 0);
+
+        // Iterate until all pages are mapped
+        while (page_num > 0){
+
+                ptp_t *current_ptp = (ptp_t *)pgtbl;;
+                pte_t *current_pte;
+                // Walk through each level of page table using `get_next_ptp`, create new page table page if necessary
+                int res = get_next_ptp(current_ptp, 0, va, &current_ptp, &current_pte, true);
+                res = get_next_ptp(current_ptp, 1, va, &current_ptp, &current_pte, true);
+                res = get_next_ptp(current_ptp, 2, va, &current_ptp, &current_pte, true);
+                // fill in the final level (L3) pte
+                for(int i = GET_L3_INDEX(va); i < PTP_ENTRIES; ++i){
+                        pte_t new_pte_val;
+
+                        new_pte_val.pte = 0;    // init all as 0
+                        new_pte_val.l3_page.is_valid = 1;
+                        new_pte_val.l3_page.is_page = 1;
+                        new_pte_val.l3_page.pfn = pa >> PAGE_SHIFT;
+
+                        set_pte_flags(&new_pte_val, flags, USER_PTE);
+
+                        current_ptp->ent[i].pte = new_pte_val.pte;
+
+                        --page_num;
+                        if(page_num == 0) return 0;
+                        pa += PAGE_SIZE;
+                        va += PAGE_SIZE;
+                }
+        }
+        return 0;
+
         /* LAB 2 TODO 3 END */
 }
 
@@ -237,6 +336,49 @@ int unmap_range_in_pgtbl(void *pgtbl, vaddr_t va, size_t len)
          * unmapped.
          */
 
+        u64 page_num = len / PAGE_SIZE + (len % PAGE_SIZE > 0);
+
+        // Iterate until all pages are unmapped
+        while (page_num > 0){
+
+                ptp_t *current_ptp = (ptp_t *)pgtbl;;
+                pte_t *current_pte;
+
+                // Walk through each level of page table using `get_next_ptp`
+                int res = get_next_ptp(current_ptp, 0, va, &current_ptp, &current_pte, false);
+                if (res == -ENOMAPPING) {
+                        page_num -= L0_PER_ENTRY_PAGES;
+                        va += L0_PER_ENTRY_PAGES * PAGE_SIZE;
+                        continue;
+                }
+
+                res = get_next_ptp(current_ptp, 1, va, &current_ptp, &current_pte, false);
+                if (res == -ENOMAPPING) {
+                        page_num -= L1_PER_ENTRY_PAGES;
+                        va += L1_PER_ENTRY_PAGES * PAGE_SIZE;
+                        continue;
+                }
+
+                res = get_next_ptp(current_ptp, 2, va, &current_ptp, &current_pte, false);
+                if (res == -ENOMAPPING) {
+                        page_num -= L2_PER_ENTRY_PAGES;
+                        va += L2_PER_ENTRY_PAGES * PAGE_SIZE;
+                        continue;
+                }
+
+                // mark the final level pte as invalid
+                for(int i = GET_L3_INDEX(va); i < PTP_ENTRIES; ++i){
+                        pte_t pte_val = current_ptp->ent[i];
+                        pte_val.pte = PTE_DESCRIPTOR_INVALID;
+
+                        --page_num;
+                        if(page_num == 0) return 0;
+
+                        va += PAGE_SIZE;
+                }
+        }
+        return 0;
+
         /* LAB 2 TODO 3 END */
 }
 
@@ -245,12 +387,177 @@ int map_range_in_pgtbl_huge(void *pgtbl, vaddr_t va, paddr_t pa, size_t len,
 {
         /* LAB 2 TODO 4 BEGIN */
 
+        // L1
+        u64 page_size = PAGE_SIZE * L1_PER_ENTRY_PAGES;  // 1GB block
+        u64 page_num = len / page_size;
+        u64 page_shift = L1_INDEX_SHIFT;
+
+        len = len - page_num * page_size;
+
+        // Iterate until all pages are mapped
+        while (page_num > 0){
+
+                ptp_t *current_ptp = (ptp_t *)pgtbl;
+                pte_t *current_pte;
+
+                int res = get_next_ptp(current_ptp, 0, va, &current_ptp, &current_pte, true);
+
+
+                for(int i = GET_L1_INDEX(va); i < PTP_ENTRIES; ++i){
+                        pte_t new_pte_val;
+
+                        new_pte_val.pte = 0;    // init all as 0
+                        new_pte_val.l1_block.is_valid = 1;
+                        new_pte_val.l1_block.is_table = 0;
+                        new_pte_val.l1_block.pfn = pa >> page_shift;
+
+                        set_pte_flags(&new_pte_val, flags, USER_PTE);
+
+                        current_ptp->ent[i].pte = new_pte_val.pte;
+
+                        pa += page_size;
+                        va += page_size;
+
+                        --page_num;
+                        if(page_num == 0) break;
+                }
+        }
+
+
+        // L2
+        page_size = PAGE_SIZE * L2_PER_ENTRY_PAGES;  // 2MB block
+        page_num = len / page_size;
+        page_shift = L2_INDEX_SHIFT;
+
+        len = len - page_num * page_size;
+
+        // Iterate until all pages are mapped
+        while (page_num > 0){
+
+                ptp_t *current_ptp = (ptp_t *)pgtbl;
+                pte_t *current_pte;
+
+                int res = get_next_ptp(current_ptp, 0, va, &current_ptp, &current_pte, true);
+                res = get_next_ptp(current_ptp, 1, va, &current_ptp, &current_pte, true);
+
+
+                for(int i = GET_L2_INDEX(va); i < PTP_ENTRIES; ++i){
+                        pte_t new_pte_val;
+
+                        new_pte_val.pte = 0;    // init all as 0
+                        new_pte_val.l2_block.is_valid = 1;
+                        new_pte_val.l2_block.is_table = 0;
+                        new_pte_val.l2_block.pfn = pa >> page_shift;
+
+                        set_pte_flags(&new_pte_val, flags, USER_PTE);
+
+                        current_ptp->ent[i].pte = new_pte_val.pte;
+
+                        pa += page_size;
+                        va += page_size;
+
+                        --page_num;
+                        if(page_num == 0) break;
+                }
+        }
+
+
+        // L3
+        page_size = PAGE_SIZE * L3_PER_ENTRY_PAGES;  // 4KB page
+        page_num = len / page_size + (len % page_size > 0);
+        page_shift = L3_INDEX_SHIFT;
+
+        // Iterate until all pages are mapped
+        while (page_num > 0){
+
+                ptp_t *current_ptp = (ptp_t *)pgtbl;;
+                pte_t *current_pte;
+                // Walk through each level of page table using `get_next_ptp`, create new page table page if necessary
+                int res = get_next_ptp(current_ptp, 0, va, &current_ptp, &current_pte, true);
+                res = get_next_ptp(current_ptp, 1, va, &current_ptp, &current_pte, true);
+                res = get_next_ptp(current_ptp, 2, va, &current_ptp, &current_pte, true);
+                // fill in the final level (L3) pte
+                for(int i = GET_L3_INDEX(va); i < PTP_ENTRIES; ++i){
+                        pte_t new_pte_val;
+
+                        new_pte_val.pte = 0;    // init all as 0
+                        new_pte_val.l3_page.is_valid = 1;
+                        new_pte_val.l3_page.is_page = 1;
+                        new_pte_val.l3_page.pfn = pa >> page_shift;
+
+                        set_pte_flags(&new_pte_val, flags, USER_PTE);
+
+                        current_ptp->ent[i].pte = new_pte_val.pte;
+
+                        --page_num;
+                        if(page_num == 0) return 0;
+                        pa += page_size;
+                        va += page_size;
+                }
+        }
+
+
+        return 0;
+
+
         /* LAB 2 TODO 4 END */
 }
 
 int unmap_range_in_pgtbl_huge(void *pgtbl, vaddr_t va, size_t len)
 {
         /* LAB 2 TODO 4 BEGIN */
+
+        u64 page_num = len / PAGE_SIZE + (len % PAGE_SIZE > 0);
+
+        // Iterate until all pages are unmapped
+        while (page_num > 0){
+
+                ptp_t *current_ptp = (ptp_t *)pgtbl;;
+                pte_t *current_pte;
+
+                // Walk through each level of page table using `get_next_ptp`
+                int res = get_next_ptp(current_ptp, 0, va, &current_ptp, &current_pte, false);
+                if (res == -ENOMAPPING) {
+                        page_num -= L0_PER_ENTRY_PAGES;
+                        va += L0_PER_ENTRY_PAGES * PAGE_SIZE;
+                        continue;
+                }
+
+                res = get_next_ptp(current_ptp, 1, va, &current_ptp, &current_pte, false);
+                if (res == -ENOMAPPING || res == BLOCK_PTP) {
+                        if(res == BLOCK_PTP){
+                                // 1GB
+                                current_pte->pte = PTE_DESCRIPTOR_INVALID;
+                        }
+                        page_num -= L1_PER_ENTRY_PAGES;
+                        va += L1_PER_ENTRY_PAGES * PAGE_SIZE;
+                        continue;
+                }
+
+                res = get_next_ptp(current_ptp, 2, va, &current_ptp, &current_pte, false);
+                if (res == -ENOMAPPING || res == BLOCK_PTP) {
+                        if(res == BLOCK_PTP){
+                                // 2MB
+                                current_pte->pte = PTE_DESCRIPTOR_INVALID;
+                        }
+                        page_num -= L2_PER_ENTRY_PAGES;
+                        va += L2_PER_ENTRY_PAGES * PAGE_SIZE;
+                        continue;
+                }
+
+                // mark the final level pte as invalid
+                for(int i = GET_L3_INDEX(va); i < PTP_ENTRIES; ++i){
+                        pte_t pte_val = current_ptp->ent[i];
+                        pte_val.pte = PTE_DESCRIPTOR_INVALID;
+
+                        --page_num;
+                        if(page_num == 0) return 0;
+
+                        va += PAGE_SIZE;
+                }
+        }
+        return 0;
+
 
         /* LAB 2 TODO 4 END */
 }
