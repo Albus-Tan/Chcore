@@ -192,6 +192,10 @@ sync_el0_64:
 	mrs	x2, elr_el1
 	bl	handle_entry_c
 
+    /* LAB 4 TODO BEGIN */
+	bl unlock_kernel
+	/* LAB 4 TODO END */
+
 	exception_exit
 
 el0_syscall:
@@ -207,7 +211,7 @@ el0_syscall:
 	stp	x14, x15, [sp, #16 * 7]
 	
 	/* LAB 4 TODO BEGIN */
-
+	bl lock_kernel
 	/* LAB 4 TODO END */
 
 	ldp	x0, x1, [sp, #16 * 0]
@@ -227,6 +231,10 @@ el0_syscall:
 
 	/* Ret from syscall */
 	str	x0, [sp]
+
+	/* LAB 4 TODO BEGIN */
+    bl unlock_kernel
+    /* LAB 4 TODO END */
 
 	exception_exit
 
@@ -250,6 +258,8 @@ error_el0_32:
 BEGIN_FUNC(__eret_to_thread)
 	mov	sp, x0
 	dmb ish
-
+	/* LAB 4 TODO BEGIN */
+    bl unlock_kernel
+    /* LAB 4 TODO END */
 	exception_exit
 END_FUNC(__eret_to_thread)

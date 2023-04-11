@@ -174,7 +174,13 @@ void sched_handle_timer_irq(void)
 void sys_yield(void)
 {
         /* LAB 4 TODO BEGIN */
-
+        if (current_thread != NULL && current_thread->thread_ctx != NULL
+            && current_thread->thread_ctx->sc != NULL
+            && current_thread->thread_ctx->sc->budget != 0) {
+                current_thread->thread_ctx->sc->budget = 0;
+        }
+        sched();
+        eret_to_thread(switch_context());
         /* LAB 4 TODO END */
         BUG("Should not return!\n");
 }
