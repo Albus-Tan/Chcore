@@ -185,7 +185,7 @@ int rr_sched(void)
         if (current_thread != NULL && current_thread->thread_ctx != NULL) {
                 struct thread_ctx *current_thread_ctx = current_thread->thread_ctx;
 
-                if (current_thread_ctx->sc->budget > 0 && current_thread_ctx->thread_exit_state != TE_EXITING) {
+                if (current_thread_ctx->sc->budget > 0 && current_thread_ctx->thread_exit_state != TE_EXITING && current_thread_ctx->state != TS_WAITING) {
                         return 0;
                 }
 
