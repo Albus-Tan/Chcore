@@ -36,7 +36,7 @@
 
 /* Present (valid) bit. */
 #define AARCH64_MMU_PTE_INVALID_MASK (1 << 0)
-/* Table bit: whether the next level is aonther pte or physical memory page. */
+/* Table bit: whether the next level is another pte or physical memory page. */
 #define AARCH64_MMU_PTE_TABLE_MASK (1 << 1)
 #define IS_PTE_INVALID(pte)        (!((pte)&AARCH64_MMU_PTE_INVALID_MASK))
 #define IS_PTE_TABLE(pte)          (!!((pte)&AARCH64_MMU_PTE_TABLE_MASK))

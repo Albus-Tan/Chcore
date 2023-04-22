@@ -42,7 +42,7 @@ struct page {
 
 struct free_list {
         struct list_head free_list;
-        u64 nr_free;
+        u64 nr_free;    // num of free blk in list
 };
 
 /* Disjoint physical memory can be represented by several phys_mem_pool. */
