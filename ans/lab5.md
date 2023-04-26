@@ -11,3 +11,5 @@
 还可以使用hash表，或字典树等。
 
 > 练习题 6：补全`libchcore/src/libc/fs.c`与`libchcore/include/libc/FILE.h`文件，以实现`fopen`, `fwrite`, `fread`, `fclose`, `fscanf`, `fprintf`五个函数，函数用法应与libc中一致。
+
+注意 `fopen` 时如果文件不存在，需要创建对应文件
