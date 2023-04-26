@@ -30,7 +30,6 @@ extern struct list_head fsm_mount_info_mapping;
 /* Mapping a pair of client_badge and fd to a mount_point_info_node struct*/
 void fsm_set_mount_info_withfd(u64 client_badge, int fd, 
 						struct mount_point_info_node* mount_point_info) {
-
 	struct client_fd_info_node *private_iter;
 	for_each_in_list(private_iter, struct client_fd_info_node, node, &fsm_mount_info_mapping) {
 		if (private_iter->client_badge == client_badge) {
@@ -43,7 +42,6 @@ void fsm_set_mount_info_withfd(u64 client_badge, int fd,
 	int i;
 	for (i = 0; i < MAX_SERVER_ENTRY_PER_CLIENT; i++)
 		n->mount_point_info[i] = NULL;
-
 	n->mount_point_info[fd] = mount_point_info;
 	/* Insert node to fsm_server_entry_mapping */
 	list_append(&n->node, &fsm_mount_info_mapping);
@@ -113,254 +111,125 @@ void fsm_server_dispatch(struct ipc_msg *ipc_msg, u64 client_badge)
 			break;
 
 		/* LAB 5 TODO BEGIN */
-                case FS_REQ_OPEN:
-                {
-                        mpinfo = get_mount_point(fr->open.pathname, strlen(fr->open.pathname));
-
-                        struct ipc_msg *ipc_msg_forward = ipc_create_msg(
+                case FS_REQ_OPEN: {
+                        mpinfo = get_mount_point(fr->open.pathname,
+                                                 strlen(fr->open.pathname));
+                        strip_path(mpinfo, fr->open.pathname);
+                        fsm_set_mount_info_withfd(
+                                client_badge, fr->open.new_fd, mpinfo);
+                        struct ipc_msg *ipc_msg_fsm = ipc_create_msg(
                                 mpinfo->_fs_ipc_struct, sizeof(struct fs_request), 0);
-                        chcore_assert(ipc_msg_forward);
-                        struct fs_request * fr_forward = (struct fs_request *)ipc_get_msg_data(ipc_msg_forward);
-
-                        fr_forward->req = FS_REQ_OPEN;
-                        fr_forward->open.new_fd = fr->open.new_fd;
-                        fr_forward->open.mode = fr->open.mode;
-                        fr_forward->open.flags = fr->open.flags;
-                        fr_forward->open.fid = fr->open.fid;
-                        strcpy(fr_forward->open.pathname, fr->open.pathname);
-
-                        strip_path(mpinfo, fr_forward->open.pathname);
-
-                        ipc_msg_forward->cap_slot_number = 1;
-                        ipc_set_msg_cap(ipc_msg_forward, 0, mpinfo->fs_cap);
-
-                        int ret = ipc_call(mpinfo->_fs_ipc_struct, ipc_msg_forward);
-                        ipc_set_msg_data(ipc_msg, ipc_get_msg_data(ipc_msg_forward), 0, ret);
-                        ipc_destroy_msg(mpinfo->_fs_ipc_struct, ipc_msg_forward);
-
-                        fsm_set_mount_info_withfd(client_badge, fr->open.new_fd, mpinfo);
+                        chcore_assert(ipc_msg_fsm);
+                        struct fs_request *fr_fsm =
+                                (struct fs_request *)ipc_get_msg_data(ipc_msg_fsm);
+                        fr_fsm->req = FS_REQ_OPEN;
+                        fr_fsm->open.new_fd = fr->open.new_fd;
+                        fr_fsm->open.mode = fr->open.mode;
+                        fr_fsm->open.flags = fr->open.flags;
+                        fr_fsm->open.fid = fr->open.fid;
+                        strcpy(fr_fsm->open.pathname, fr->open.pathname);
+                        ret = ipc_call(mpinfo->_fs_ipc_struct, ipc_msg_fsm);
+                        ipc_destroy_msg(mpinfo->_fs_ipc_struct, ipc_msg_fsm);
                         break;
                 }
-                case FS_REQ_CLOSE:
-                {
+                case FS_REQ_CLOSE: {
                         mpinfo = fsm_get_mount_info_withfd(client_badge, fr->close.fd);
-
-                        struct ipc_msg *ipc_msg_forward = ipc_create_msg(
+                        struct ipc_msg *ipc_msg_fsm = ipc_create_msg(
                                 mpinfo->_fs_ipc_struct, sizeof(struct fs_request), 0);
-                        chcore_assert(ipc_msg_forward);
-                        struct fs_request * fr_forward = (struct fs_request *)ipc_get_msg_data(ipc_msg_forward);
-
-                        fr_forward->req = FS_REQ_CLOSE;
-                        fr_forward->close.fd = fr->close.fd;
-
-                        ipc_msg_forward->cap_slot_number = 1;
-                        ipc_set_msg_cap(ipc_msg_forward, 0, mpinfo->fs_cap);
-
-                        int ret = ipc_call(mpinfo->_fs_ipc_struct, ipc_msg_forward);
-                        ipc_set_msg_data(ipc_msg, ipc_get_msg_data(ipc_msg_forward), 0, ret);
-                        ipc_destroy_msg(mpinfo->_fs_ipc_struct, ipc_msg_forward);
+                        chcore_assert(ipc_msg_fsm);
+                        struct fs_request *fr_fsm =
+                                (struct fs_request *)ipc_get_msg_data(ipc_msg_fsm);
+                        fr_fsm->req = FS_REQ_CLOSE;
+                        fr_fsm->close.fd = fr->close.fd;
+                        ret = ipc_call(mpinfo->_fs_ipc_struct, ipc_msg_fsm);
+                        ipc_destroy_msg(mpinfo->_fs_ipc_struct, ipc_msg_fsm);
                         break;
                 }
-                case FS_REQ_CREAT:
-                {
-                        mpinfo = get_mount_point(fr->creat.pathname, strlen(fr->creat.pathname));
-
-                        struct ipc_msg *ipc_msg_forward = ipc_create_msg(
+                case FS_REQ_CREAT: {
+                        mpinfo = get_mount_point(fr->creat.pathname,
+                                                 strlen(fr->creat.pathname));
+                        strip_path(mpinfo, fr->creat.pathname);
+                        struct ipc_msg *ipc_msg_fsm = ipc_create_msg(
                                 mpinfo->_fs_ipc_struct, sizeof(struct fs_request), 0);
-                        chcore_assert(ipc_msg_forward);
-                        struct fs_request * fr_forward = (struct fs_request *)ipc_get_msg_data(ipc_msg_forward);
-
-                        fr_forward->req = FS_REQ_CREAT;
-                        fr_forward->creat.mode = fr->creat.mode;
-                        strcpy(fr_forward->creat.pathname, fr->creat.pathname);
-
-                        strip_path(mpinfo, fr_forward->creat.pathname);
-
-                        ipc_msg_forward->cap_slot_number = 1;
-                        ipc_set_msg_cap(ipc_msg_forward, 0, mpinfo->fs_cap);
-
-                        int ret = ipc_call(mpinfo->_fs_ipc_struct, ipc_msg_forward);
-                        ipc_set_msg_data(ipc_msg, ipc_get_msg_data(ipc_msg_forward), 0, ret);
-                        ipc_destroy_msg(mpinfo->_fs_ipc_struct, ipc_msg_forward);
+                        chcore_assert(ipc_msg_fsm);
+                        struct fs_request *fr_fsm =
+                                (struct fs_request *)ipc_get_msg_data(ipc_msg_fsm);
+                        fr_fsm->req = FS_REQ_CREAT;
+                        fr_fsm->creat.mode = fr->creat.mode;
+                        strcpy(fr_fsm->creat.pathname, fr->creat.pathname);
+                        ret = ipc_call(mpinfo->_fs_ipc_struct, ipc_msg_fsm);
+                        ipc_destroy_msg(mpinfo->_fs_ipc_struct, ipc_msg_fsm);
                         break;
                 }
-                case FS_REQ_MKDIR:
-                {
-                        mpinfo = get_mount_point(fr->mkdir.pathname, strlen(fr->mkdir.pathname));
-
-                        struct ipc_msg *ipc_msg_forward = ipc_create_msg(
-                                mpinfo->_fs_ipc_struct, sizeof(struct fs_request), 0);
-                        chcore_assert(ipc_msg_forward);
-                        struct fs_request * fr_forward = (struct fs_request *)ipc_get_msg_data(ipc_msg_forward);
-
-                        fr_forward->req = FS_REQ_MKDIR;
-                        fr_forward->mkdir.mode = fr->mkdir.mode;
-                        strcpy(fr_forward->mkdir.pathname, fr->mkdir.pathname);
-
-                        strip_path(mpinfo, fr_forward->mkdir.pathname);
-
-                        ipc_msg_forward->cap_slot_number = 1;
-                        ipc_set_msg_cap(ipc_msg_forward, 0, mpinfo->fs_cap);
-
-                        int ret = ipc_call(mpinfo->_fs_ipc_struct, ipc_msg_forward);
-                        ipc_set_msg_data(ipc_msg, ipc_get_msg_data(ipc_msg_forward), 0, ret);
-                        ipc_destroy_msg(mpinfo->_fs_ipc_struct, ipc_msg_forward);
-                        break;
-                }
-                case FS_REQ_RMDIR:
-                {
-                        mpinfo = get_mount_point(fr->rmdir.pathname, strlen(fr->rmdir.pathname));
-
-                        struct ipc_msg *ipc_msg_forward = ipc_create_msg(
-                                mpinfo->_fs_ipc_struct, sizeof(struct fs_request), 0);
-                        chcore_assert(ipc_msg_forward);
-                        struct fs_request * fr_forward = (struct fs_request *)ipc_get_msg_data(ipc_msg_forward);
-
-                        fr_forward->req = FS_REQ_RMDIR;
-                        fr_forward->rmdir.flags = fr->rmdir.flags;
-                        strcpy(fr_forward->rmdir.pathname, fr->rmdir.pathname);
-
-                        strip_path(mpinfo, fr_forward->rmdir.pathname);
-
-                        ipc_msg_forward->cap_slot_number = 1;
-                        ipc_set_msg_cap(ipc_msg_forward, 0, mpinfo->fs_cap);
-
-                        int ret = ipc_call(mpinfo->_fs_ipc_struct, ipc_msg_forward);
-                        ipc_set_msg_data(ipc_msg, ipc_get_msg_data(ipc_msg_forward), 0, ret);
-                        ipc_destroy_msg(mpinfo->_fs_ipc_struct, ipc_msg_forward);
-                        break;
-                }
-                case FS_REQ_UNLINK:
-                {
-                        mpinfo = get_mount_point(fr->unlink.pathname, strlen(fr->unlink.pathname));
-
-                        struct ipc_msg *ipc_msg_forward = ipc_create_msg(
-                                mpinfo->_fs_ipc_struct, sizeof(struct fs_request), 0);
-                        chcore_assert(ipc_msg_forward);
-                        struct fs_request * fr_forward = (struct fs_request *)ipc_get_msg_data(ipc_msg_forward);
-
-                        fr_forward->req = FS_REQ_UNLINK;
-                        fr_forward->unlink.flags = fr->unlink.flags;
-                        strcpy(fr_forward->unlink.pathname, fr->unlink.pathname);
-
-                        strip_path(mpinfo, fr_forward->unlink.pathname);
-
-                        ipc_msg_forward->cap_slot_number = 1;
-                        ipc_set_msg_cap(ipc_msg_forward, 0, mpinfo->fs_cap);
-
-                        int ret = ipc_call(mpinfo->_fs_ipc_struct, ipc_msg_forward);
-                        ipc_set_msg_data(ipc_msg, ipc_get_msg_data(ipc_msg_forward), 0, ret);
-                        ipc_destroy_msg(mpinfo->_fs_ipc_struct, ipc_msg_forward);
-                        break;
-                }
-                case FS_REQ_READ:
-                {
+                case FS_REQ_READ: {
+                        size_t len = fr->read.count;
                         mpinfo = fsm_get_mount_info_withfd(client_badge, fr->read.fd);
-
-                        struct ipc_msg *ipc_msg_forward = ipc_create_msg(
-                                mpinfo->_fs_ipc_struct, sizeof(struct fs_request), 0);
-                        chcore_assert(ipc_msg_forward);
-                        struct fs_request * fr_forward = (struct fs_request *)ipc_get_msg_data(ipc_msg_forward);
-
-                        fr_forward->req = FS_REQ_READ;
-                        fr_forward->read.fd = fr->read.fd;
-                        fr_forward->read.count = fr->read.count;
-
-                        ipc_msg_forward->cap_slot_number = 1;
-                        ipc_set_msg_cap(ipc_msg_forward, 0, mpinfo->fs_cap);
-
-                        int ret = ipc_call(mpinfo->_fs_ipc_struct, ipc_msg_forward);
-                        ipc_set_msg_data(ipc_msg, ipc_get_msg_data(ipc_msg_forward), 0, ret);
-                        ipc_destroy_msg(mpinfo->_fs_ipc_struct, ipc_msg_forward);
+                        struct ipc_msg *ipc_msg_fsm =
+                                ipc_create_msg(mpinfo->_fs_ipc_struct, sizeof(struct fs_request) + len, 0);
+                        chcore_assert(ipc_msg_fsm);
+                        struct fs_request *fr_fsm =
+                                (struct fs_request *)ipc_get_msg_data(ipc_msg_fsm);
+                        fr_fsm->req = FS_REQ_READ;
+                        fr_fsm->read.fd = fr->read.fd;
+                        fr_fsm->read.count = fr->read.count;
+                        ret = ipc_call(mpinfo->_fs_ipc_struct, ipc_msg_fsm);
+                        memcpy(ipc_get_msg_data(ipc_msg), ipc_get_msg_data(ipc_msg_fsm), ret);
+                        // ipc_set_msg_data(ipc_msg, ipc_get_msg_data(ipc_msg_fsm), 0, ret);
+                        ipc_destroy_msg(mpinfo->_fs_ipc_struct, ipc_msg_fsm);
                         break;
                 }
-                case FS_REQ_WRITE:
-                {
+                case FS_REQ_WRITE: {
+                        size_t len = fr->write.count;
                         mpinfo = fsm_get_mount_info_withfd(client_badge, fr->write.fd);
-
-                        struct ipc_msg *ipc_msg_forward = ipc_create_msg(
-                                mpinfo->_fs_ipc_struct, sizeof(struct fs_request), 0);
-                        chcore_assert(ipc_msg_forward);
-                        struct fs_request * fr_forward = (struct fs_request *)ipc_get_msg_data(ipc_msg_forward);
-
-                        fr_forward->req = FS_REQ_WRITE;
-                        fr_forward->write.fd = fr->write.fd;
-                        fr_forward->write.count = fr->write.count;
-
-                        ipc_msg_forward->cap_slot_number = 1;
-                        ipc_set_msg_cap(ipc_msg_forward, 0, mpinfo->fs_cap);
-
-                        int ret = ipc_call(mpinfo->_fs_ipc_struct, ipc_msg_forward);
-                        ipc_set_msg_data(ipc_msg, ipc_get_msg_data(ipc_msg_forward), 0, ret);
-                        ipc_destroy_msg(mpinfo->_fs_ipc_struct, ipc_msg_forward);
+                        struct ipc_msg *ipc_msg_fsm =
+                                ipc_create_msg(mpinfo->_fs_ipc_struct, sizeof(struct fs_request) + len, 0);
+                        chcore_assert(ipc_msg_fsm);
+                        struct fs_request *fr_fsm =
+                                (struct fs_request *)ipc_get_msg_data(ipc_msg_fsm);
+                        fr_fsm->req = FS_REQ_WRITE;
+                        fr_fsm->write.fd = fr->write.fd;
+                        fr_fsm->write.count = fr->write.count;
+                        fr_fsm->write.write_buff_begin = fr->write.write_buff_begin;
+                        memcpy((void *)fr_fsm + sizeof(struct fs_request),
+                               (void *)fr + sizeof(struct fs_request),
+                               len);
+                        ret = ipc_call(mpinfo->_fs_ipc_struct, ipc_msg_fsm);
+                        ipc_destroy_msg(mpinfo->_fs_ipc_struct, ipc_msg_fsm);
                         break;
                 }
-                case FS_REQ_GET_SIZE:
-                {
-                        mpinfo = get_mount_point(fr->getsize.pathname, strlen(fr->getsize.pathname));
-
-                        struct ipc_msg *ipc_msg_forward = ipc_create_msg(
-                                mpinfo->_fs_ipc_struct, sizeof(struct fs_request), 0);
-                        chcore_assert(ipc_msg_forward);
-                        struct fs_request * fr_forward = (struct fs_request *)ipc_get_msg_data(ipc_msg_forward);
-
-                        fr_forward->req = FS_REQ_GET_SIZE;
-                        strcpy(fr_forward->getsize.pathname, fr->getsize.pathname);
-
-                        strip_path(mpinfo, fr_forward->getsize.pathname);
-
-                        ipc_msg_forward->cap_slot_number = 1;
-                        ipc_set_msg_cap(ipc_msg_forward, 0, mpinfo->fs_cap);
-
-                        int ret = ipc_call(mpinfo->_fs_ipc_struct, ipc_msg_forward);
-                        ipc_set_msg_data(ipc_msg, ipc_get_msg_data(ipc_msg_forward), 0, ret);
-                        ipc_destroy_msg(mpinfo->_fs_ipc_struct, ipc_msg_forward);
+                case FS_REQ_GETDENTS64: {
+                        mpinfo = fsm_get_mount_info_withfd(client_badge,
+                                                           fr->getdents64.fd);
+                        struct ipc_msg *ipc_msg_fsm =
+                                ipc_create_msg(mpinfo->_fs_ipc_struct, sizeof(struct fs_request), 0);
+                        chcore_assert(ipc_msg_fsm);
+                        struct fs_request *fr_fsm =
+                                (struct fs_request *)ipc_get_msg_data(ipc_msg_fsm);
+                        fr_fsm->req = FS_REQ_GETDENTS64;
+                        fr_fsm->getdents64.fd = fr->getdents64.fd;
+                        fr_fsm->getdents64.count = fr->getdents64.count;
+                        ret = ipc_call(mpinfo->_fs_ipc_struct, ipc_msg_fsm);
+                        memcpy(ipc_get_msg_data(ipc_msg),
+                               ipc_get_msg_data(ipc_msg_fsm),
+                               ret);
+                        ipc_destroy_msg(mpinfo->_fs_ipc_struct, ipc_msg_fsm);
                         break;
                 }
-                case FS_REQ_LSEEK:
-                {
-                        mpinfo = fsm_get_mount_info_withfd(client_badge, fr->lseek.fd);
-
-                        struct ipc_msg *ipc_msg_forward = ipc_create_msg(
+                case FS_REQ_GET_SIZE: {
+                        mpinfo = get_mount_point(fr->getsize.pathname,
+                                                 strlen(fr->getsize.pathname));
+                        strip_path(mpinfo, fr->getsize.pathname);
+                        struct ipc_msg *ipc_msg_fsm = ipc_create_msg(
                                 mpinfo->_fs_ipc_struct, sizeof(struct fs_request), 0);
-                        chcore_assert(ipc_msg_forward);
-                        struct fs_request * fr_forward = (struct fs_request *)ipc_get_msg_data(ipc_msg_forward);
-
-                        fr_forward->req = FS_REQ_LSEEK;
-                        fr_forward->lseek.fd = fr->lseek.fd;
-                        fr_forward->lseek.offset = fr->lseek.offset;
-                        fr_forward->lseek.whence = fr->lseek.whence;
-
-                        ipc_msg_forward->cap_slot_number = 1;
-                        ipc_set_msg_cap(ipc_msg_forward, 0, mpinfo->fs_cap);
-
-                        int ret = ipc_call(mpinfo->_fs_ipc_struct, ipc_msg_forward);
-                        ipc_set_msg_data(ipc_msg, ipc_get_msg_data(ipc_msg_forward), 0, ret);
-                        ipc_destroy_msg(mpinfo->_fs_ipc_struct, ipc_msg_forward);
+                        chcore_assert(ipc_msg_fsm);
+                        struct fs_request *fr_fsm =
+                                (struct fs_request *)ipc_get_msg_data(ipc_msg_fsm);
+                        fr_fsm->req = FS_REQ_GET_SIZE;
+                        strcpy(fr_fsm->getsize.pathname, fr->getsize.pathname);
+                        ret = ipc_call(mpinfo->_fs_ipc_struct, ipc_msg_fsm);
+                        ipc_destroy_msg(mpinfo->_fs_ipc_struct, ipc_msg_fsm);
                         break;
                 }
-                case FS_REQ_GETDENTS64:
-                {
-                        mpinfo = fsm_get_mount_info_withfd(client_badge, fr->getdents64.fd);
-
-                        struct ipc_msg *ipc_msg_forward = ipc_create_msg(
-                                mpinfo->_fs_ipc_struct, sizeof(struct fs_request), 0);
-                        chcore_assert(ipc_msg_forward);
-                        struct fs_request * fr_forward = (struct fs_request *)ipc_get_msg_data(ipc_msg_forward);
-
-                        fr_forward->req = FS_REQ_GETDENTS64;
-                        fr_forward->getdents64.fd = fr->getdents64.fd;
-                        fr_forward->getdents64.count = fr->getdents64.count;
-
-                        ipc_msg_forward->cap_slot_number = 1;
-                        ipc_set_msg_cap(ipc_msg_forward, 0, mpinfo->fs_cap);
-
-                        int ret = ipc_call(mpinfo->_fs_ipc_struct, ipc_msg_forward);
-                        ipc_set_msg_data(ipc_msg, ipc_get_msg_data(ipc_msg_forward), 0, ret);
-                        ipc_destroy_msg(mpinfo->_fs_ipc_struct, ipc_msg_forward);
-                        break;
-                }
-
 		/* LAB 5 TODO END */
 
 		default:
