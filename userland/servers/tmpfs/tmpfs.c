@@ -152,7 +152,10 @@ static int tfs_mknod(struct inode *dir, const char *name, size_t len, int mkdir)
 		return -ENOENT;
 	}
 	/* LAB 5 TODO BEGIN */
-
+        inode = mkdir ? new_dir() : new_reg();
+        inode->size = len;
+        dent = new_dent(inode, name, strlen(name));
+        htable_add(&(dir->dentries),dent->name.hash,&(dent->node));
 	/* LAB 5 TODO END */
 
 	return 0;
@@ -222,7 +225,55 @@ int tfs_namex(struct inode **dirat, const char **name, int mkdir_p)
 	// `tfs_lookup` and `tfs_mkdir` are useful here
 
 	/* LAB 5 TODO BEGIN */
+#ifdef TMPFS_DBG
+        printf("[tfs_namex] name %s\n", *name);
+#endif
+        // Initialize the char array buff to store name
+        memset(buff, '\0', sizeof(buff));
+        i = 0;
+        while(**name != '\0'){
+                if(**name == '/'){
+                        buff[i] = '\0';
+#ifdef TMPFS_DBG
+                printf("[tfs_namex] **name == '/', buf %s\n", buff);
+#endif
+                        dent = tfs_lookup(*dirat, buff, i);
+                        if(dent){
+                                // found
+#ifdef TMPFS_DBG
+                                printf("[tfs_namex] dent found\n");
+#endif
+                        } else {
+                                // not found
+#ifdef TMPFS_DBG
+                                printf("[tfs_namex] dent not found\n");
+#endif
+                                if(mkdir_p){
+                                        tfs_mkdir(*dirat, buff, dent->inode->size);
+                                } else {
+                                        return -EINVAL;
+                                }
+                                dent = tfs_lookup(*dirat, buff, i);
+                                if(!dent) return -EINVAL;
+                        }
+                        *dirat = dent->inode;
+                        i = -1;
+                        if(**name) memset(buff, '\0', sizeof(buff));
+                } else {
+                        buff[i] = **name;
+#ifdef TMPFS_DBG
+                        printf("[tfs_namex] buff[i] = %c\n", **name);
+#endif
 
+                }
+                ++i;
+                ++(*name);
+        }
+        *name = *name - i;
+
+#ifdef TMPFS_DBG
+        printf("[tfs_namex] return name %s\n", *name);
+#endif
 	/* LAB 5 TODO END */
 
 	/* we will never reach here? */
@@ -294,12 +345,46 @@ ssize_t tfs_file_write(struct inode * inode, off_t offset, const char *data,
 	BUG_ON(inode->type != FS_REG);
 	BUG_ON(offset > inode->size);
 
+#ifdef TMPFS_DBG
+        printf("[tfs_file_write] offset %d, data %s\n", offset, data);
+#endif
+
 	u64 page_no, page_off;
 	u64 cur_off = offset;
 	size_t to_write;
 	void *page;
 
 	/* LAB 5 TODO BEGIN */
+        if(offset + size > inode->size){
+#ifdef TMPFS_DBG
+                printf("[tfs_file_write] exceed the file size %d, resize the file %d\n", inode->size, offset + size);
+#endif
+                // exceed the file size, resize the file
+                inode->size = offset + size;
+        }
+
+        size_t total_size = size;
+        while(size > 0){
+                page_no = cur_off / PAGE_SIZE;
+                page_off = cur_off % PAGE_SIZE;
+                page = radix_get(&(inode->data), page_no);
+                if(!page){
+                        page = malloc(PAGE_SIZE);
+                        radix_add(&(inode->data), page_no, page);
+                }
+
+                to_write = PAGE_SIZE - page_off;
+                to_write = (size > to_write) ? to_write : size;
+
+#ifdef TMPFS_DBG
+                printf("[tfs_file_write] to_write %d\n", to_write);
+#endif
+
+                // write file
+                memcpy(page + page_off, data + total_size - size, to_write);
+                size -= to_write;
+                cur_off += to_write;
+        }
 
 	/* LAB 5 TODO END */
 
@@ -317,11 +402,30 @@ ssize_t tfs_file_read(struct inode * inode, off_t offset, char *buff,
 	BUG_ON(offset > inode->size);
 
 	u64 page_no, page_off;
-	u64 cur_off = offset;
-	size_t to_read;
+	u64 cur_off = offset;   // offset should maintain unchanged
+	size_t to_read; // size to read in current page
 	void *page;
 
 	/* LAB 5 TODO BEGIN */
+        if(offset + size > inode->size){
+                // exceed the file size, read till EOF
+                size = inode->size - offset;
+        }
+
+        size_t total_size = size;
+        while(size > 0){
+                page_no = cur_off / PAGE_SIZE;
+                page_off = cur_off % PAGE_SIZE;
+                page = radix_get(&(inode->data), page_no);
+
+                to_read = PAGE_SIZE - page_off;
+                to_read = (size > to_read) ? to_read : size;
+
+                // read file
+                memcpy(buff + total_size - size, page + page_off, to_read);
+                size -= to_read;
+                cur_off += to_read;
+        }
 
 	/* LAB 5 TODO END */
 
@@ -347,9 +451,42 @@ int tfs_load_image(const char *start)
 	cpio_extract(start, "/");
 
 	for (f = g_files.head.next; f; f = f->next) {
-	/* LAB 5 TODO BEGIN */
-
-	/* LAB 5 TODO END */
+                /* LAB 5 TODO BEGIN */
+                dirat = tmpfs_root;
+                dent = tmpfs_root_dent;
+                leaf = f->name;
+                len = f->header.c_filesize;
+                if(!tfs_namex(&dirat, &leaf, true)){
+                        // success
+                        dent = tfs_lookup(dirat, leaf, strlen(leaf));
+                        if(!dent){
+                                // not found
+                                if(len == 0){
+                                        // dir
+#ifdef TMPFS_DBG
+                                        printf("not found, create dir\n");
+#endif
+                                        tfs_mkdir(dirat, leaf, 1);
+                                        continue;
+                                } else {
+                                        // file
+#ifdef TMPFS_DBG
+                                        printf("not found, create file\n");
+#endif
+                                        tfs_creat(dirat, leaf, len);
+                                        dent = tfs_lookup(dirat, leaf, strlen(leaf));
+                                        if(!dent) return -1;
+                                }
+                        }
+#ifdef TMPFS_DBG
+                        printf("file %s write in %s   and len is %d\n", leaf, f->data, len);
+#endif
+                        write_count = tfs_file_write(dent->inode, 0, f->data, len);
+#ifdef TMPFS_DBG
+                        printf("size is %d\n", dent->inode->size);
+#endif
+                }
+                /* LAB 5 TODO END */
 	}
 
 	return 0;

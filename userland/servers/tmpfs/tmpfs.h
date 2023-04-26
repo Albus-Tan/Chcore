@@ -31,6 +31,8 @@
 #include "cpio.h"
 #include "../fs_base/fs_vnode.h"
 
+//#define TMPFS_DBG
+
 extern struct inode *tmpfs_root;
 extern struct dentry *tmpfs_root_dent;
 extern struct id_manager fidman;
