@@ -31,7 +31,9 @@
 
 在 `fsm_server_disptach` 中补全转发 IPC 请求的逻辑即可。注意这是两个 IPC 不能复用，需要重新构造 IPC 请求，拷贝参数并发送给对应的文件系统。
 
+## 测试结果
 
+![image-20230427203919780](lab5.assets/image-20230427203919780.png)
 
 ## va_list、va_arg、va_start 和 va_end 宏的学习
 
