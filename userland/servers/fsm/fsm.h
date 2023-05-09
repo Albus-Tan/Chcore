@@ -17,6 +17,7 @@
 
 #include "defs.h"
 
+//#define FSM_DBG
 
 int init_fsm(void);
 int fsm_init_procmgr_struct(int cap);

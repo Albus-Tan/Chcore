@@ -10,8 +10,12 @@
  * Mulan PSL v1 for more details.
  */
 
+//#define FILE_DBG
+#define MAX_FMT_SIZE 1024
+
 typedef struct FILE {
 	/* LAB 5 TODO BEGIN */
-
+        int fd;
+        unsigned int mode;
 	/* LAB 5 TODO END */
 } FILE;

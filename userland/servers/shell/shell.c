@@ -59,6 +59,18 @@ int mount_fs(const char *fspath, const char *mount_point) {
     return ret;
 }
 
+int get_file_size(const char *path) {
+        int ret;
+        struct ipc_msg *ipc_msg = ipc_create_msg(
+                fs_ipc_struct, sizeof(struct fs_request), 0);
+        chcore_assert(ipc_msg);
+        struct fs_request * fr = (struct fs_request *)ipc_get_msg_data(ipc_msg);
+        fr->req = FS_REQ_GET_SIZE;
+        strcpy(fr->getsize.pathname, path);
+        ret = ipc_call(fs_ipc_struct, ipc_msg);
+        ipc_destroy_msg(fs_ipc_struct, ipc_msg);
+        return ret;
+}
 
 
 /* Retrieve the entry name from one dirent */
@@ -118,11 +130,11 @@ void demo_getdents(int fd)
 		}
 }
 
-int alloc_fd() 
-{
-	static int cnt = 0;
-	return ++cnt;
-}
+//int alloc_fd()
+//{
+//	static int cnt = 0;
+//	return ++cnt;
+//}
 
 int do_complement(char *buf, char *complement, int complement_time)
 {
@@ -134,6 +146,31 @@ int do_complement(char *buf, char *complement, int complement_time)
 	int offset;
 
 	/* LAB 5 TODO BEGIN */
+
+        // open file
+        FILE *file = fopen("/", "r");
+        int fd = file->fd;
+        ret = getdents(fd, scan_buf, BUFLEN);
+
+        for (offset = 0; offset < ret; offset += p->d_reclen) {
+                p = (struct dirent *)(scan_buf + offset);
+                get_dent_name(p, name);
+                if(*name != '.'){
+                        // check same
+                        while (buf[j] != '\0'){
+                                if(buf[j] != complement[j]) continue;
+                                ++j;
+                        }
+                        if(complement_time == 0){
+                                strcpy(complement, name);
+                                break;
+                        }
+                        --complement_time;
+                }
+        }
+
+        // close file
+        fclose(file);
 
 	/* LAB 5 TODO END */
 
@@ -161,11 +198,30 @@ char *readline(const char *prompt)
 	}
 
 	while (1) {
-    __chcore_sys_yield();
+                __chcore_sys_yield();
 		c = getch();
 
 	/* LAB 5 TODO BEGIN */
 	/* Fill buf and handle tabs with do_complement(). */
+                if(c == '\n' || c == '\r'){
+                        // return
+                        buf[i] = '\0';
+                        if(complement_time > 0){
+                                strcpy(buf, complement);
+                        }
+                        putc('\n');
+                        break;
+                } else if(c == '\t') {
+                        // do_complement
+                        buf[i] = '\0';
+                        do_complement(buf, complement, complement_time);
+                        printf(complement);
+                        ++complement_time;
+                } else {
+                        complement_time = 0;
+                        buf[i] = c;
+                        ++i;
+                }
 
 	/* LAB 5 TODO END */
 	}
@@ -183,7 +239,18 @@ void print_file_content(char* path)
 {
 
 	/* LAB 5 TODO BEGIN */
+        char buf[BUFLEN];
 
+        // open file
+        FILE *file = fopen(path, "r");
+        // get size
+        int len = get_file_size(path);
+        // read file
+        unsigned long size = fread(buf, len, 1, file);
+        // print
+        printf("%s",buf);
+        // close file
+        fclose(file);
 	/* LAB 5 TODO END */
 
 }
@@ -194,6 +261,27 @@ void fs_scan(char *path)
 
 	/* LAB 5 TODO BEGIN */
 
+        // open file
+        FILE *file = fopen(path, "r");
+        int fd = file->fd;
+
+        char name[BUFLEN];
+        char scan_buf[BUFLEN];
+        int offset;
+        struct dirent *p;
+
+        int ret = getdents(fd, scan_buf, BUFLEN);
+
+        for (offset = 0; offset < ret; offset += p->d_reclen) {
+                p = (struct dirent *)(scan_buf + offset);
+                get_dent_name(p, name);
+                if(*name != '.'){
+                        printf("%s ", name);
+                }
+        }
+
+        // close file
+        fclose(file);
 	/* LAB 5 TODO END */
 }
 
@@ -226,7 +314,11 @@ int do_cat(char *cmdline)
 int do_echo(char *cmdline)
 {
 	/* LAB 5 TODO BEGIN */
+        cmdline += 4;
+        while (*cmdline == ' ')
+                cmdline++;
 
+        printf(cmdline);
 	/* LAB 5 TODO END */
 	return 0;
 }
@@ -278,7 +370,20 @@ int run_cmd(char *cmdline)
 	int cap = 0;
 	/* Hint: Function chcore_procm_spawn() could be used here. */
 	/* LAB 5 TODO BEGIN */
+        int ret;
+        char pathbuf[BUFLEN] = {0};
+        pathbuf[0] = '\0';
+        while (*cmdline == ' ')
+                cmdline++;
+        if (*cmdline == '\0') return -1;
+        else if (*cmdline != '/') strcpy(pathbuf, "/");
+        strcat(pathbuf, cmdline);
 
+        ret = chcore_procm_spawn(pathbuf, &cap);
+        if (ret < 0) {
+                printf("No such binary\n");
+                return ret;
+        };
 	/* LAB 5 TODO END */
 	return 0;
 }

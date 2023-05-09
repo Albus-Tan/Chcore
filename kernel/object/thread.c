@@ -106,9 +106,32 @@ static u64 load_binary(struct cap_group *cap_group, struct vmspace *vmspace,
         for (i = 0; i < elf->header.e_phnum; ++i) {
                 pmo_cap[i] = -1;
                 if (elf->p_headers[i].p_type == PT_LOAD) {
+                        // memsz is the size in memory
                         seg_sz = elf->p_headers[i].p_memsz;
+                        // vaddr is segment's start virtual address
                         p_vaddr = elf->p_headers[i].p_vaddr;
                         /* LAB 3 TODO BEGIN */
+
+                        u64 vaddr_start = ROUND_DOWN(p_vaddr, PAGE_SIZE);
+                        u64 vaddr_end = ROUND_UP(p_vaddr + seg_sz, PAGE_SIZE);
+                        seg_map_sz = vaddr_end - vaddr_start;
+
+                        // PMO_DATA means immediate allocation
+                        r = create_pmo(seg_map_sz, PMO_DATA, cap_group, &pmo);
+                        if(r < 0){
+                                goto out_free_obj;
+                        }
+                        pmo_cap[i] = r;
+
+                        char* pmo_start = (char *) phys_to_virt(pmo->start) + (p_vaddr - vaddr_start);
+                        char* seg_start = bin + elf->p_headers[i].p_offset;
+                        u64 copy_size = elf->p_headers[i].p_filesz;     // size in file(disk)
+
+                        memcpy((void *)pmo_start, seg_start, copy_size);
+
+                        flags = PFLAGS2VMRFLAGS(elf->p_headers[i].p_flags);
+
+                        ret = vmspace_map_range(vmspace, vaddr_start, seg_map_sz, flags, pmo);
 
                         /* LAB 3 TODO END */
                         BUG_ON(ret != 0);
@@ -127,6 +150,8 @@ static u64 load_binary(struct cap_group *cap_group, struct vmspace *vmspace,
 
         /* PC: the entry point */
         return elf->header.e_entry;
+out_free_obj:
+        obj_free(pmo);
 out_free_cap:
         for (--i; i >= 0; i--) {
                 if (pmo_cap[i] != 0)
@@ -399,7 +424,10 @@ void sys_thread_exit(void)
         printk("\nBack to kernel.\n");
 #endif
         /* LAB 3 TODO BEGIN */
-
+        current_thread->thread_ctx->thread_exit_state = TE_EXITED;
+        current_thread->thread_ctx->state = TS_EXIT;
+        // obj_free(current_thread);
+        current_thread = NULL;
         /* LAB 3 TODO END */
         /* Reschedule */
         sched();
@@ -436,7 +464,7 @@ int sys_set_affinity(u64 thread_cap, s32 aff)
         }
 
         /* LAB 4 TODO BEGIN */
-
+        thread->thread_ctx->affinity = aff;
         /* LAB 4 TODO END */
         if (thread_cap != -1)
                 obj_put((void *)thread);
@@ -459,7 +487,7 @@ s32 sys_get_affinity(u64 thread_cap)
         if (thread == NULL)
                 return -ECAPBILITY;
         /* LAB 4 TODO BEGIN */
-
+        aff = thread->thread_ctx->affinity;
         /* LAB 4 TODO END */
 
         if (thread_cap != -1)
