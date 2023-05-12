@@ -467,7 +467,11 @@ int sd_Read(void *pBuffer, size_t nCount)
 {
 	/* LAB 6 TODO BEGIN */
     /* BLANK BEGIN */
-
+        u32 block_no = m_ullOffset / SD_BLOCK_SIZE;
+        int size_read = DoRead((u8 *)pBuffer, nCount, block_no);
+        if(size_read == nCount){
+                return 0;
+        }
     /* BLANK END */
     /* LAB 6 TODO END */
 	return -1;
@@ -477,7 +481,11 @@ int sd_Write(const void *pBuffer, size_t nCount)
 {
 	/* LAB 6 TODO BEGIN */
     /* BLANK BEGIN */
-
+        u32 block_no = m_ullOffset / SD_BLOCK_SIZE;
+        int size_write = DoWrite((u8 *)pBuffer, nCount, block_no);
+        if(size_write == nCount){
+                return 0;
+        }
     /* BLANK END */
     /* LAB 6 TODO END */
 	return -1;
@@ -487,10 +495,11 @@ u64 Seek(u64 ullOffset)
 {
 	/* LAB 6 TODO BEGIN */
     /* BLANK BEGIN */
-
+        m_ullOffset = ullOffset;
+        return m_ullOffset;
     /* BLANK END */
     /* LAB 6 TODO END */
-	return -1;
+	// return -1;
 }
 
 int PowerOn(void)
@@ -1504,7 +1513,19 @@ int DoDataCommand(int is_write, u8 * buf, size_t buf_size, u32 block_no)
 	// LAB6 TODO: judge the type of the command
 	/* LAB 6 TODO BEGIN */
     /* BLANK BEGIN */
-
+        if(is_write){
+                if(m_blocks_to_transfer > 1){
+                        command = WRITE_MULTIPLE_BLOCK;
+                } else {
+                        command = WRITE_BLOCK;
+                }
+        } else {
+                if(m_blocks_to_transfer > 1){
+                        command = READ_MULTIPLE_BLOCK;
+                } else {
+                        command = READ_SINGLE_BLOCK;
+                }
+        }
     /* BLANK END */
     /* LAB 6 TODO END */
 
@@ -1537,8 +1558,15 @@ int DoDataCommand(int is_write, u8 * buf, size_t buf_size, u32 block_no)
 int DoRead(u8 * buf, size_t buf_size, u32 block_no)
 {
 	/* LAB 6 TODO BEGIN */
-    /* BLANK BEGIN */
-
+        /* BLANK BEGIN */
+        // Check the status of the card
+        if (EnsureDataMode() != 0){
+                return -1;
+        }
+        if (DoDataCommand(0, buf, buf_size, block_no) < 0){
+                return -1;
+        }
+        return buf_size;
     /* BLANK END */
     /* LAB 6 TODO END */
 	return -1;
@@ -1548,7 +1576,13 @@ int DoWrite(u8 * buf, size_t buf_size, u32 block_no)
 {
 	/* LAB 6 TODO BEGIN */
     /* BLANK BEGIN */
-
+        if (EnsureDataMode() != 0){
+                return -1;
+        }
+        if (DoDataCommand(1, buf, buf_size, block_no) < 0){
+                return -1;
+        }
+        return buf_size;
     /* BLANK END */
     /* LAB 6 TODO END */
 	return -1;

@@ -384,6 +384,10 @@ int run_cmd(char *cmdline)
                 printf("No such binary\n");
                 return ret;
         };
+
+        while (1){
+
+        }
 	/* LAB 5 TODO END */
 	return 0;
 }
